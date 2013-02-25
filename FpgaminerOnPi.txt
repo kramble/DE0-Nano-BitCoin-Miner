@@ -1,0 +1,224 @@
+Fpgaminer on Raspberry Pi
+-------------------------
+Requisites:
+One working Raspberry Pi, preferrably with the latest Debian wheezy, but it should work on most linuxes.
+One (or more) Terasic DE0-Nano card, tested and working.
+One computer to do the fpga programming (windows, or linux if supported by the Altera Quartus software).
+Optional (but recommended), putty or a similar SSH client so you can log into your Pi remotely.
+Optional (but recommended), an external 5 volt or 3.3 volt power supply rated at least 1 amp.
+Some jumper cables to connect to the header pins (female to female). If desparate you could get away with
+miniature croc-clips, but be very careful not to short out the pins (use insulating tape, and only work with
+the power disconnected).
+Optional: (but recommended) three 4k7 ohm resistors, or components for the opto-isolator circuit described below.
+Optional: (but recommended) a small fan (a 5 volt one will run off the fpga power supply) and (not essential 
+if you've got the fan) a heatsink for the fpga chip. Dynamic Ram (or 16 pin DIL) stick-on heatsinks are good.
+Optional: a temperature monitor (one of the indoor/outdoor types with an probe will work fine).
+
+Power off your Pi and the DE0-Nano boards before doing any work on them!
+
+First remove the transparant plastic cover as it will be running hot. If you've got the heatsinks, apply
+them to the fpga chip, being very careful not to come in contact with any other components.
+
+Wrap insulating tape around the metal body of the temperature probe and attach it to the top of the heatsink
+(I used blu-tak). You don't want the chip's internal junction temperature to rise above 85C, but allow for the
+thermal resistance of the package + heatsink so I'd recommend around 65C maximum (a bit less if no heatsink).
+
+If you're going to use the opto isolator circuit, build it, either on breadboard or PCB/veroboard. Test it
+using the supplied fpgaserial.sof and com.c (see below). Otherwise, if you're brave and omitting the opto isolator,
+connect the Pi and fpga ground leads, the Pi TxD to fpga RxD, Pi RxD to fpga TxD. Use the 4k7 ohm resistors to
+give some measure of protection against damage. Again test the connection.
+
+You need to disable the Pi console logging in order to use the serial port, instructions are below.
+
+Get the Pi-de0-nano-miner.zip file onto your Pi (you are connected to the internet I assume, its not much use
+otherwise). Unzip the package into a directory, say /home/Pi/Pi-de0-nano-miner. Edit the configuration file
+config.txt and set your connection parameters (its currently a bit fussy, so keep to the exact format of the
+original, especially do not add any spaces). Alternatively you can test offline using the spoof package, more
+on that later.
+
+Install the fpgaminer package on your pc from https://github.com/progranism/Open-Source-FPGA-Bitcoin-Miner
+You may want to rename the folder as its rather long! I'll refer to it as C:\fpgaminer from here on.
+
+Install Quartus on your PC, if youve not already done that (it will take up to an hour and needs abour 6GB disk
+space on windows). Connect the DE0-Nano USB cable. If you've not already installed the driver then follow the
+prompts (you need to cancel the default action and browse to C:\altera\10.1\quartus\drivers\usb-blaster).
+Test it using the DE0-Nano demonstrations, which you should copy onto your PC from the supplied CDRom,
+vis C:\DE0-Nano\Demonstration\my_first_fpga\my_first_fpga.sof ... you can use the fpgaminer programmer in
+C:\fpgaminer\scripts\program\program-fpga-board.bat
+
+Now we're ready to mine. If you're using an external power supply for the DE0-Nano, connect it up now.
+The onboard demo should now run (assuming you've not flashed the internal ROM with your own code) and
+blinkenlights should occur.
+
+On the PC (assuming windows, YMMV for linux), open a command prompt in C:\fpgaminer\scripts\program
+(press SHIFT and right click on the folder and select Open Command Window Here if you're on Vista or later).
+Connect the DE0-Nano USB cable (if not already connected), and assuming the driver has been installed, the
+(windows) computer will go "Boink". Wait a few seconds then type program-fpga-board.bat (just p then tab).
+You should be see some green text bumf, then
+0) USB-Blaster [USB-0]
+        @1: EP3C25/EP4CE22 (0x020F30DD)
+
+Which USB device would you like to program? 
+Enter 0 (unless you're lucky enough to have several boards connected at the same time!)
+
+You will then be prompted to select a SOF to program, best to start with DE0_Nano_serial-40MHz.sof
+Programming should only take a second or two. The blinkenlights demo should now change to a simple binary
+count. This is the top byte of the nonce and gives a good indication of the hash speed (its 2^32 divided
+by the time in seconds for a complete cycle, or roughly one increment per second translates to 16.78MH/s).
+
+You can do a quick test by pressing the KEY-0 button. This resets the nonce to 0 (very useful for testing
+against spoofed data).
+
+On the Pi ...
+cd /home/Pi/Pi-de0-nano-miner
+./mine.sh
+
+NB The "./" simply says to run the program in the current directory, since by default PATH does not contain it.
+You should now be mining. Enjoy.
+
+Normally you'll want to run it in the background so you can log off. Just do ...
+./minebg.sh
+Nothing will be displayed (other than a message about the log file). To watch its progress do ...
+tail -f /tmp/mine.log
+
+To stop the miner either type CTRL-C (if you're running mine.sh) or for background, assuming you're logged
+in as Pi ...
+ps -fupi
+
+Identify the PID of the minebg.sh and do ...
+kill pid
+
+If its really stuck you may need ...
+kill -9 pid
+
+You'll probably notice several send_json processes. These are communicating with the mining pool server (one starts
+for every message) and they hang around for a few minutes until the remote server connection times out (a
+bit naughty, I suppose I ought to clear down the connection from my end). If any are older than a few minutes,
+you can safely kill them (I'll write a reaper daemon at some point). The client identifies itself to the mining
+pool server as "kramble fpgaminer pi client package 1.0".
+
+More detailed instructions follow ...
+
+-----------------------------------------------------------------------------------------------------------------
+To use the serial port on the Raspberry Pi you need to do the following...
+
+cd /boot
+sudo cp cmdline.txt cmdline.backup
+sudo nano cmdline.txt		... or use vi if you prefer
+You should have ...
+dwc_otg.lpm_enable=0 console=ttyAMA0,115200 kgdboc=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait
+Change it to ...
+dwc_otg.lpm_enable=0 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait
+NB This needs to be a single line, do not break it up!
+
+cd /etc
+sudo cp inittab inittab.backup
+sudo nano inittab		... or use vi if you prefer
+On the last line, add a # at the front ...
+#T0:23:respawn:/sbin/getty -L ttyAMA0 115200 vt100
+
+Reboot ...
+sudo shutdown -r now
+
+All should be fine, but if you've made a mistake and the Pi refuses to boot, this is how to recover...
+First, try power-cycling. Turn it off and on again. If that does not work.
+Disconnect the power cord and remove the memory card. Insert it into a card reader on another computer.
+Delete cmline.txt and copy cmdline.backup to cmdline.txt
+If on windows, right click on the drive letter and do "Safely Remove" or "Eject"
+Reinsert the memory card into the Pi and power it up.
+If that does not fix it then you'll have to re-flash the card with an fresh installation image dowloaded from the Pi website.
+BUT you could try this first (NB I have not tested this, so you may want to google for it)...
+Back on your other PC, edit cmdline.txt and at the end add " init=/bin/sh"
+Power it up, you should have a command prompt (BTW, this is good for recovering from a lost password too).
+You're root, so no need to sudo.
+cd /etc
+cp inittab.backup initiab
+shutdown -r now
+
+It is also possible to fix inittab on another computer, but you'll have to mount the partition which is best
+done on a linux box as windows does not support ext4 without additional software (google is your friend ...
+"mount ext4 windows", or DuckDuckGo if google is not your friend).
+-----------------------------------------------------------------------------------------------------------------
+Connecting the Pi and DE0-Nano
+------------------------------
+The Pi header looks as follows (best displayed in a fixed font), looking at the board with the memory
+card on your left and the header at the top left.
++------------------------------------ ...
++ o     o     o     o     o     o     o
++ 5V    5V    GND   TxD   RxD
++
++ 3V3
++ o     o     o     o     o     o     o
++------------------------------------ ...
+P1  ... Note the P1 marking on the board.
+
+I am using the J1 header on the DE0-Nano, looking at the board with the usb connector on the left, and the
+leds at the top, J1 is the connector above the leds. From the extreme left of the connector ...
++----------------------------------- ...
++ o     o     o     o     o     o     o
++ RxD   TxD   Bias1 Bias2 nc    GND       (nc=no connection)
++
++                               5V    
++ o     o     o     o     o     o     o
++----------------------------------- ...
+
+Be very careful not to attach anything to the 5V pins ... the Pi is not protected against overvoltage and
+applying 5V to any pin will destroy it. The same probably goes for the DE0-Nano.
+
+The "Bias" pins are simply driven high for use in biasing the opto-coupler (I did not want to use a 3.3V supply
+in case of accidental shorts, and certainly NOT the 5V supply which would risk destroying the fpga device).
+
+If not using the opto-coupler circuit, connect as follows [this is UNTESTED, use at your own risk]:
+
+Pi GND <-------/\/\/\/\--------> DE0-Nan0 GND
+               4.7K Ohm
+Pi TxD <-------/\/\/\/\--------> DE0-Nan0 RxD
+               4.7K Ohm
+Pi RxD <-------/\/\/\/\--------> DE0-Nan0 TxD
+               4.7K Ohm
+
+The resistors give some measure of protection aginst damage and should NOT be omitted, though 4.7K Ohm
+is probably too high. If it does not work try lower values eg 1K Ohm, or even 100 or 47 Ohm.
+
+The opto-coupler circuit is as follows (rough ASCII-Art sketch, best viewed in fixed font)...
+
+The pinout is for an EL825 device (they are very cheap, less than a dollar), if you use a different
+one then take care to look up the datasheet as the pinout may differ.
+
+Viewed from above:						EL825
+                               +--------------------+
+                             1 + (spot)             +
+Pi 3.3V <-------/\/\/\/\-------+------+             +      +-------/\/\/\/\-----> DE0-Nan0 Bias1 (or 3.3V)
+               Rtx 1K Ohm      +      +             + 8    +       Rrx 220 Ohm
+                               +    -----    + /----+------+--------------------> DE0-Nan0 RxD
+                               +    \   /    +/
+                               +     \ /     +\
+                               +      +      + \----+---------------------------> DE0-Nan0 GND
+                             2 +      +             + 7
+Pi TxD <-----------------------+------+             +
+                               +                    +
+                             3 +                    +
+DE0-Nano <-------/\/\/\/\------+------+             +      +-------/\/\/\/\-----> Pi 3.3V [NOT 5V]
+Bias2 or 3.3V  Rtx 1K Ohm      +      +             + 6    +       Rrx 220 Ohm
+                               +    -----    + /----+------+--------------------> Pi RxD
+                               +    \   /    +/
+                               +     \ /     +\
+                               +      +      + \----+---------------------------> Pi GND
+                             4 +      +             + 5
+DE0-Nano TxD <-----------------+------+             +
+                               +                    +
+                               +--------------------+
+			  
+			  
+Rrx can be adjusted to tweak the maximum baud rate. Lower values are needed for faster speeds.
+The 220 ohm shown works well at 4800 baud, but will draw about 15mA. The absolute max for the EL825 is
+80mA, but I would not recommend trying this as the Pi 3.3V supply is restricted to 50mA and the DE0-Nano
+FPGA can only supply 40mA per output pin. Stick to the values above as 4800 baud is plenty fast enough and
+my current fpga bitstreams are hard coded to run at this speed. Note that this is a very crude circuit,
+much faster speeds should be possible with a slighly more complex design.
+
+Several optoisolators can be used in a wire-or configuration so as to support more than one DE0-Nano.
+Simply connect them in parallel, but only use a single common 220ohm Rrx resistor on the Pi RxD. Thus
+Pi TxD is sent to all the DE0-Nano's in common, and the RxD is wire-or combined. The risk of the DE0-Nano's
+sending data simultaneously is very small and the pi mining software will simply ignore the resulting garbage.
+-----------------------------------------------------------------------------------------------------------------
