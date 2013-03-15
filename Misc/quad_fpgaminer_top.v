@@ -198,7 +198,7 @@ module fpgaminer_top (osc_clk);
 	wire[1:0] nonceprefix;
 	wire[31:0] fullnonce;
 	assign nonceprefix = is_golden_ticket0 ? 2'd0 : is_golden_ticket1 ? 2'd1 : is_golden_ticket2 ? 2'd2 : 2'd3;
-	assign fullnonce = {nonceprefix,nonce_next};	
+	assign fullnonce = {nonceprefix,nonce};
 	
 	always @ (posedge hash_clk)
 	begin
