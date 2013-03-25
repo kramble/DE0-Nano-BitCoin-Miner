@@ -11,6 +11,7 @@
 // v21 - removes redundant data from work, now 44 bytes rather than 64 sent
 // v22 - fixed hacktick (I forgot to set it in v21) and reduced timeout from
 //       1000s  (what was I thinking?) to 100ms
+// v23 - reduce amount of logging of getwork. Also renamed IN to GN.
 
 #include <termios.h>
 #include <stdio.h>
@@ -234,79 +235,80 @@ int getwork()
 	char tmpfile[256];
 	sprintf(tmpfile,"%s/work_%u",minetmp,now);
 	strcpy(workreq_file, tmpfile);
-	printf("getwork tmpfile <%s>\n",tmpfile);
+	printf("getwork tmpfile %s\n",tmpfile);
 	submit_work_request(tmpfile);
 	return 0;
 }
 
 int json_find(char *out, char *buf, char *name)
+// This is the NEW stratum version which has all items on same line
+// NB This assumes both the item name and value are quoted, BUT some
+// items (error, id) have unquoted values. The current code WILL NOT WORK
+// if we try to lookup these values (but we don't so its not a problem).
 {
 	char *p = buf;
 	int state = 1;
 	while (*p)
 	{
 		// This really ought to be a switch() - TODO
-		if (state == 1)
+		if (state == 1)	// search for a quote
 		{
-			while (*p && isspace(*p))
+			while (*p && (*p != '"'))
 				p++;
+			p++;
 			state++;
 		}
 		else if (state == 2)
 		{
-			if (*p != '"')
-				return state + 100;
-			p++;
+			if (strncmp(p,name,strlen(name)))
+			{
+				p++;
+				state = 1;	// Keep looking
+				continue;
+			}
+			p+=strlen(name);
 			state++;
 		}
 		else if (state == 3)
 		{
-			if (strncmp(p,name,strlen(name)))
-				return state + 100;
-			p+=strlen(name);
-			state++;
-		}
-		else if (state == 4)
-		{
 			if (*p != '"')
 				return state + 100;
 			p++;
 			state++;
 		}
-		else if (state == 5)
+		else if (state == 4)
 		{
 			while (*p && isspace(*p))
 				p++;
 			state++;
 		}
-		else if (state == 6)
+		else if (state == 5)
 		{
 			if (*p != ':')
 				return state + 100;
 			p++;
 			state++;
 		}
-		else if (state == 7)
+		else if (state == 6)
 		{
 			while (*p && isspace(*p))
 				p++;
 			state++;
 		}
-		else if (state == 8)
+		else if (state == 7)
 		{
 			if (*p != '"')
 				return state + 100;
 			p++;
 			state++;
 		}
-		else if (state == 9)
+		else if (state == 8)
 		{
 			while (*p && *p!='"')
 			{
 				*out++ = *p++;
 			}
 			*out = 0;
-			// LAZY we do not check for proper line termination
 			if (*p == '"')
 				return 0;	// SUCCESS
 			return state + 100;		// Data is incomplete, try later
@@ -324,6 +326,7 @@ int checkwork()
 		return 1;	// Do not check more than once per second
 	last_checkwork = now;
 
+	// FILE *f = fopen("work.stratum", "r");	// TEST using local file
 	FILE *f = fopen(workreq_file, "r");
 	if (!f)
 	{
@@ -335,10 +338,18 @@ int checkwork()
 	}
 	else
 	{
-		printf("checkwork: INFO opened file %s", workreq_file);	// No \n
+		// printf("checkwork: INFO opened file %s", workreq_file);	// No \n
 	}
 
-	char buf[1024];
+	// Use larger buffer for stratum as data is all on one line (original 1024
+	// bytes worked but prefer larger one for safety)
+	char buf[8192] = { };	// MUST clear it else get WIERD bug vis midstate
+						    // and data are not updated after first getwork.
+							// Its due to old data not being cleared from
+							// stack, so we see the old data and match on it
+							// Should not happen, but maybe a bug in json_find
+							// scans beyond initial null terminator?
+
 	int got_midstate=0;
 	int got_data=0;
 
@@ -352,33 +363,25 @@ int checkwork()
 		if (!fgets(buf, sizeof(buf)-1, f))
 			break;
 		if (!(ret=json_find(midstate, buf, "midstate")))
+		{
 			got_midstate = 1;
+			// printf("mid=%s\n",midstate);	// DEBUG
+		}
 		if (!(ret=json_find(data, buf, "data")))
 			got_data = 1;
 
 		if (got_midstate && got_data)
 		{
 			fclose(f);
-#if 0		// No longer using workfilename as of v19
-			FILE *out = fopen(workfilename,"w");
-			if (!out)
-			{
-				workreq_file[0] = 0;	// Clear file (acts as flag)
-				printf("\ncheckwork: ERROR opening file %s\n", workreq_file);
-				return 3;
-			}
-			fprintf(out,"%s%s\n",midstate,data);
-			fclose(out);
-#endif
 			workreq_file[0] = 0;	// Clear file (acts as flag)
-			printf(" SUCCESS loaded work\n");
+			printf("checkwork: SUCCESS loaded work\n");
 			return 0;	// Success
 		}
 		// printf("state=%d :%s\n", ret, buf);
 	}
 
 	fclose(f);
-	printf(" INCOMPLETE\n");
+	// printf(" INCOMPLETE\n");
 	return 1;	// Not found
 }
 
@@ -386,12 +389,7 @@ int loadwork()
 {
 	// Load test work data = midstate + data (reads hex strings)
 
-#if 0	// Disused as of v19
-	// NB This file is now written to by checkwork()
-	FILE *fw = fopen(workfilename,"r");
-	if (!fw)
-		return 1;	// Error
-#endif
+	// printf("mid=%s dat=%s\n", midstate, data);
 
 	// Kludge so we don't have to rewrite code
 	char indata[MIDSTATE_DATA_LEN*2]; // Size of midstate + data
@@ -800,8 +798,10 @@ main(int Parm_Count, char *Parms[])
 
 		if (status==1)  // Sending work
 		{
-			printf("%02x",sendwork[sendcount]);
-			fflush(stdout);
+			// Verbose (comment out to disable)
+			// printf("%02x",sendwork[sendcount]);
+			// fflush(stdout);
+
 			write(fd,&sendwork[sendcount++],1);  //write 1 byte to the port
 			usleep(1000);		// Sleep another millisecond
 			// 2ms sleep per byte keeps us well within 9600 baud
@@ -855,8 +855,8 @@ main(int Parm_Count, char *Parms[])
 		}
 		else
 		{
-    		/* We have input */
-			printf(" IN "); fflush(stdout);
+    		/* We have input - v23 changed logging tag to GN (was IN) */
+			printf(" GN "); fflush(stdout);
 			if (FD_ISSET(fd, &input))
 			{
 				res = read(fd,buf,255);

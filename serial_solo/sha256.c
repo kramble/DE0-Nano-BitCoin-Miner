@@ -738,6 +738,7 @@ GOLDEN
 	
 	// This was done in main(), but needs to be here sha256.c
 	// MJ Allocate some memory for work_restart (we don't bother freeing it)
+	/// ... it is now free'd on return
 	if (!work_restart)
 		work_restart = (struct work_restart*) malloc (sizeof(struct work_restart));
 	if (!work_restart)
@@ -884,7 +885,7 @@ ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000
 	// reversehex(target_str);		// ditto
 
 	int len = strlen(midstate_str) + strlen(data_str) + strlen(hash_str) + strlen(target_str) + 4;	// Allow for four terminators
-	json_t *json_data = (json_t *)malloc(len);	// Don't bother freeing it
+	json_t *json_data = (json_t *)malloc(len);	// Now free'd on return
 	if (!json_data)
 		return 1;		// Malloc ERROR
 	
@@ -953,6 +954,19 @@ ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000
 
 	printf("scanhash_c rc = %d %s\n", rc, rc ? "MATCH" : "BAD");
 #endif
+
+	// Need to free memory when used in mine.c
+	if (work_restart)
+	{
+		free(work_restart);
+		work_restart = NULL;
+	}
+
+	if (json_data)
+	{
+		free(json_data);
+		json_data = NULL;
+	}
 
 	return !rc;	// NB Invert rc since want to return 0 for success (fixed v06)
 }

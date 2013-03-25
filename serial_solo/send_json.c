@@ -151,7 +151,9 @@ int main(int argc, char *argv[])
 	
 	if (getwork)
 	{
-		strcat(buftmp,"{\"method\": \"getwork\", \"params\": [], \"id\":0} =");
+		// MJ 25/3/2013 removed ttrailing " =" since it breaks stratum proxy
+		// strcat(buftmp,"{\"method\": \"getwork\", \"params\": [], \"id\":0} =");
+		strcat(buftmp,"{\"method\": \"getwork\", \"params\": [], \"id\":0}");
 		char contentType[128];
 		// NB Be sure to set correct length else server will hang
 		sprintf(contentType,"Content-Type: application/json\r\nContent-Length: %d\r\n\r\n", strlen(buftmp));
@@ -163,7 +165,9 @@ int main(int argc, char *argv[])
 		// This is a typical nonce submission ...
 		// strcat(buftmp,"{\"method\": \"getwork\", \"params\": [ \"000000015c972bf2cc9286be39638ae8713f12c38b97cd5d011b26c7000001b9000000004feabf3938ae810cfa717653551322e180e5efa5b2fed72c127c422acbd25faa508e4e7c1a0575ef0dd9580a000000800000000000000000000000000000000000000000000000000000000000000000000000000000000080020000\" ], \"id\":1} =");
 		char str[1024];
-		sprintf(str,"{\"method\": \"getwork\", \"params\": [ \"%s\" ], \"id\":1} =", argv[5]);
+		// MJ 25/3/2013 removed ttrailing " =" since it breaks stratum proxy
+		// sprintf(str,"{\"method\": \"getwork\", \"params\": [ \"%s\" ], \"id\":1} =", argv[5]);
+		sprintf(str,"{\"method\": \"getwork\", \"params\": [ \"%s\" ], \"id\":1}", argv[5]);
 		strcat(buftmp, str);
 		char contentType[128];
 		// NB Be sure to set correct length else server will hang
@@ -188,8 +192,55 @@ int main(int argc, char *argv[])
     // MJ made this a loop..
     // NB only exits after server timout (5 seconds by default, http.conf
     //    setting KeepAliveTimeout)
+	// BUT stratum proxy does NOT time out!! Need to use select/poll
+	int selectcount = 0;
     do
     {
+	   // Wait for data
+        int             max_fd;
+        fd_set          input;
+        struct timeval  timeout;
+
+        /* Initialize the input set */
+        FD_ZERO(&input);
+        FD_SET(sockfd, &input);
+
+        max_fd = sockfd + 1;
+
+        /* Initialize the timeout structure */
+        timeout.tv_sec  = 0;
+        timeout.tv_usec = 10000;	// 10 millisec
+
+        /* Do the select */
+        int n = select(max_fd, &input, NULL, NULL, &timeout);
+
+        /* See if there was an error */
+        if (n < 0)
+		{
+            perror("select failed");
+			break;
+		}
+        else if (n == 0)
+		{
+             // printf("TIMEOUT\n"); fflush(stdout);
+			 selectcount++;
+			 if (selectcount > 2000)	// 20 secs assuming 10mS timeout
+             {
+				// NB This print goes to output in /tmp/fpgaminer/work_nnnn
+				// which is not what we really want but it does no harm and
+				// is useful debug info so leave it in for now.
+				printf("Closing connection after 20 secs\n"); fflush(stdout);
+				break;
+			 }
+			continue;
+        }
+        else
+        {
+            if (!FD_ISSET(sockfd, &input))
+				continue;	// Its actually an error!!
+			// else fallthrough to recv ...
+		}
+
        bzero(buffer,256);
        // n = read(sockfd,buffer,255);	// CRASHES IN WINDOWS
        n = recv(sockfd,buffer,255,0);	// OK
