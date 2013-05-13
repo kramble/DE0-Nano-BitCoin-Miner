@@ -1,0 +1,10 @@
+
+# PlanAhead Generated physical constraints 
+
+NET "RxD" LOC = P83;
+NET "osc_clk" LOC = P84;
+NET "led1" LOC = P81;
+NET "led2" LOC = P23;
+NET "led3" LOC = P24;
+NET "TxD" LOC = P82;
+NET "unused_q" LOC = P143;
