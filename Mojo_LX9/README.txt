@@ -26,9 +26,10 @@ fpgaminer_stub.txt to follow that line, just before the endmodule line.
 To compile, see notes in MojoCreateXSE.txt (I have precompiled .bit and .bin bitstreams).
 Compilation time can be very variable (minor changes can have disproportionate effects).
 I have been unable to compile with 6 hashers, so the current version is configured for
-3 hashers. Once this is tested and working, I will work on the 6 hasher version (it should
-compile as the ../Xilinx_LX9 project is essentially the same and works, so it just needs
-some manual intervention in the placement using FPGA Editor).
+3 hashers. SOLVED: you need to set XIL_PAR_ENABLE_LEGALIZER=1 in your environment, so for
+windows you change Computer/(rightclick)/Properties/AdvancedSystemSettings/EnvironmentVars.
+Compilation then works OK (as for whether the bitstream works I don't know), though the
+50MHz build takes much longer than the 100Mhz build (WHY? no idea, just saying).
 
 I have configured the clock PLL at 50MHz which is fairly conservative, it will likely run at
 100MHz or more. Hash rate is clock * hashers / 132, vis 1.13MHash/sec for 3 hashers at 50MHz
@@ -63,10 +64,10 @@ I would appreciate feedback on the Mojo forum as to whether this works!
 
 Changes
 -------
-2013-06-16:11:30	Initial release
-2013-06-16:14:30	Changed CTR_SIZE from 7 to 8 in serial.v to support faster clock
-					Generated new bitsteams (NB the previous .bin is invalid, do not use)
-					Added serial_rx_debounce.v (used for testing @4800baud, not for Mojo)
+2013-06-16:11:30 Initial release
+2013-06-16:14:00 Changed CTR_SIZE from 7 to 8 in serial.v to support faster clock
+                 Generated new bitsteams
+                 Added serial_rx_debounce.v (used for testing @4800baud, not for Mojo)
 
 ---------------------------------------------------------------------------
 TODO...
@@ -77,6 +78,6 @@ Test miner.py on raspberry pi at 4800 baud - DONE
 Do test build for my LX9 homebrew board (different project/top module due to pinout),
 NB configure for 4800 baud to run using standard optoisolator interface - DONE (works)
 Try at 100MHz - DONE (works)
-Get 6 hasher variant to build - TODO
+Get 6 hasher variant to build - DONE
 Investigate Icarus/Ztex protocol for use with cgminer instead of miner.py (see technohog) - TODO
 ---------------------------------------------------------------------------
