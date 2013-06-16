@@ -16,7 +16,8 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
 
    // async_receiver #(.SPEED_MHZ(SPEED_MHZ)) deserializer(.clk(clk), .RxD(RxD), .RxD_data_ready(RxD_data_ready), .RxD_data(RxD_data));
 
-   serial_rx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(7)) serial_rx (
+	// Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
+   serial_rx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(8)) serial_rx (
 	.clk(clk),
 	.rst(rst),
 	.rx(RxD),
@@ -169,7 +170,8 @@ module serial_transmit  # (parameter SPEED_MHZ=50) (clk, TxD, busy, send, word);
 
    // async_transmitter #(.SPEED_MHZ(SPEED_MHZ)) serializer(.clk(clk), .TxD(TxD), .TxD_start(TxD_start), .TxD_data(out_byte), .TxD_busy(TxD_busy));
 
-   serial_tx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(7)) serial_tx (
+	// Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
+   serial_tx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(8)) serial_tx (
 	.clk(clk),
 	.rst(rst),
 	.tx(TxD),

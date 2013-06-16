@@ -60,6 +60,14 @@ insanely sensitive to whitespace, keep the exact indentation and don't use tab c
 There are some additional print statements for debugging. Comment these out if not needed.
 
 I would appreciate feedback on the Mojo forum as to whether this works!
+
+Changes
+-------
+2013-06-16:11:30	Initial release
+2013-06-16:14:30	Changed CTR_SIZE from 7 to 8 in serial.v to support faster clock
+					Generated new bitsteams (NB the previous .bin is invalid, do not use)
+					Added serial_rx_debounce.v (used for testing @4800baud, not for Mojo)
+
 ---------------------------------------------------------------------------
 TODO...
 Simulate serial rx - DONE
@@ -67,8 +75,8 @@ Create btcminer a/c mojotest & config into miner.py - DONE
 Check miner.py 44 byte protocol - DONE
 Test miner.py on raspberry pi at 4800 baud - DONE
 Do test build for my LX9 homebrew board (different project/top module due to pinout),
-NB configure for 4800 baud to run using standard optoisolator interface - TODO
-Try at 100MHz (esp serial protocol) - TODO
+NB configure for 4800 baud to run using standard optoisolator interface - DONE (works)
+Try at 100MHz - DONE (works)
 Get 6 hasher variant to build - TODO
 Investigate Icarus/Ztex protocol for use with cgminer instead of miner.py (see technohog) - TODO
 ---------------------------------------------------------------------------

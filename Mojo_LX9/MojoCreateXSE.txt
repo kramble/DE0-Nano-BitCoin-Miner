@@ -20,5 +20,5 @@ Double click Generate Programming File to start processing (takes 10 mins for th
 hasher variant but never completes for 6 hashers, just sits at router phase 4 with
 thousands unrouted ... TODO tweak placement via FPGA Editor).
 ... LOTS of warnings. 7 loadless signals (unconnected pins).
-6 hashers ... 60% LUT Utilization, 86% occupied.  Max clock 135MHz.
-3 hashers ... 35% LUT Utilization, 67% occupied.  Max clock 135MHz.
+6 hashers ... 60% LUT Utilization, 86% occupied.
+3 hashers ... 35% LUT Utilization, 67% occupied.  Max clock 78MHz (see mojo_top.twr).
