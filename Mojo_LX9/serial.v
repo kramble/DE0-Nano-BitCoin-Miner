@@ -1,11 +1,17 @@
 // by teknohog, replaces virtual_wire by rs232
 /*
+ * 20-Jun-2013 ... Now configurable for either kramble or teknokog (icarus) protocol. Use parameter ICARUS.
  * 15-Nov-2012 ...
  * Removed 20 bytes (160 bits) from async_receiver.v with matching changes in fpgaminer_top.v
  * Added timeout counter to reset if demux_state is active, but no data received in approx 80ms
  */
 
-module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, load_flag);
+module serial_receive # (
+parameter SPEED_MHZ = 50,	// Must match PLL hash_clk
+parameter ICARUS = 0,		// Use 0 for kramble protocol (44 bytes). Set to 1 for icarus (64 bytes).
+parameter KRAMBLE_TEST = 0	// Do not use (enables 4800 baud serial)
+)
+(clk, RxD, midstate, data2, load_flag);
    input      clk;
    input      RxD;
    
@@ -16,8 +22,8 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
 
    // async_receiver #(.SPEED_MHZ(SPEED_MHZ)) deserializer(.clk(clk), .RxD(RxD), .RxD_data_ready(RxD_data_ready), .RxD_data(RxD_data));
 
-	// Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
-   serial_rx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(8)) serial_rx (
+   // Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
+   serial_rx #(.CLK_PER_BIT(KRAMBLE_TEST?208*SPEED_MHZ:2*SPEED_MHZ), .CTR_SIZE(KRAMBLE_TEST?16:8)) serial_rx (
 	.clk(clk),
 	.rst(rst),
 	.rx(RxD),
@@ -37,10 +43,9 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
    // logic on the return side too. The check bits could be legible
    // 7seg for quick feedback :)
    
-   // reg [511:0] input_buffer;
-   reg [351:0] input_buffer;				// MJ Reduce by 20 bytes
+   reg [((ICARUS == 1)?511:351):0] input_buffer;
    reg [351:0] input_copy;
-   reg [5:0]   demux_state = 6'b000000;		// MJ Reduced from 7 to 6 bits
+   reg [6:0]   demux_state = 7'b000000;
    reg [23:0]  demux_timeout = 23'd0;		// MJ Timeout if idle & reset state
    reg load_flag_reg = 0;					// MJ Flag toggles when data is loaded
    
@@ -49,8 +54,6 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
 	// NB While not absolutely essential (could just live with invalid data during loading),
 	// using input_copy buffer costs almost nothing as registers are present in LE's anyway.
 	
-   // assign midstate = input_copy[511:256];
-   // assign data2 = input_copy[255:0];
    assign midstate = input_copy[351:96];
    assign data2 = input_copy[95:0];
    
@@ -60,11 +63,16 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
    always @(posedge clk)
 		rst <= 1'b0;
 
+	   
    always @(posedge clk)
 		case (demux_state)
-			6'b101100:			// MJ Reduced by 20 to 44 ... OOPS this was 22, fixed
+			((ICARUS == 1) ? 7'b1000000 :	// teknohog/icarus protocol 64 bytes
+			7'b0101100 ):					// kramble protocol 44 bytes
 			begin
-				input_copy <= input_buffer;
+				if(ICARUS == 1)
+					input_copy <= { input_buffer[511:256], input_buffer[95:0] };
+				else
+					input_copy <= input_buffer;
 				demux_state <= 0;
 				demux_timeout <= 0;
 				load_flag_reg <= !load_flag_reg;	// Toggle the flag to indicate data loaded
@@ -95,7 +103,11 @@ module serial_receive # (parameter SPEED_MHZ=50) (clk, RxD, midstate, data2, loa
    
 endmodule // serial_receive
 
-module serial_transmit  # (parameter SPEED_MHZ=50) (clk, TxD, busy, send, word);
+module serial_transmit  # (
+parameter SPEED_MHZ = 50,	// Must match PLL hash_clk
+parameter KRAMBLE_TEST = 0	// Do not use (enables 4800 baud serial)
+)
+(clk, TxD, busy, send, word);
 
    // split 4-byte output into bytes
 
@@ -170,8 +182,8 @@ module serial_transmit  # (parameter SPEED_MHZ=50) (clk, TxD, busy, send, word);
 
    // async_transmitter #(.SPEED_MHZ(SPEED_MHZ)) serializer(.clk(clk), .TxD(TxD), .TxD_start(TxD_start), .TxD_data(out_byte), .TxD_busy(TxD_busy));
 
-	// Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
-   serial_tx #(.CLK_PER_BIT(2*SPEED_MHZ), .CTR_SIZE(8)) serial_tx (
+   // Increased CTR_SIZE from 7 to 8 to support clocks > 63MHz
+   serial_tx #(.CLK_PER_BIT(KRAMBLE_TEST?208*SPEED_MHZ:2*SPEED_MHZ), .CTR_SIZE(KRAMBLE_TEST?16:8)) serial_tx (
 	.clk(clk),
 	.rst(rst),
 	.tx(TxD),

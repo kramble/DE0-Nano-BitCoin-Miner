@@ -22,14 +22,17 @@
 `timescale 1ns/1ps
 
 module fpgaminer_top #(
-	// CONFIGURATION
-	// NB Cannot currently compile with 6 hashers as PAR does not complete, this should
-	// be fixable by manually tweaking the placement using FPGA editor.
-	// parameter LOOP = 11,
-	// parameter NUM_HASHERS = 6,
+	// CONFIGURATION - Do NOT change these here, set them in the calling module eg mojo-top.v
+	parameter NUM_HASHERS = 3,		// 	NB specify 3,22 or 6,11 ONLY
 	parameter LOOP = 22,
-	parameter NUM_HASHERS = 3,
-	parameter SPEED_MHZ = 50		// NB now in units of 1MHz
+	// parameter NUM_HASHERS = 6,	// This WILL build, but its slow and needs XIL_PAR_ENABLE_LEGALIZER=1
+	// parameter LOOP = 11,	
+	parameter SPEED_MHZ = 50,	// PLL output clock, adjust as desired (up to 100MHz seems to work OK)
+	parameter ICARUS = 0,		// Use 0 for kramble protocol (44 bytes). Set to 1 for icarus (64 bytes).
+	// The following are for test and simulation ...
+	parameter KRAMBLE_TEST = 0,	// Do not use (enables 4800 baud serial, which is NOT a Mojo feature)
+	parameter SIM_SERIAL = 0,	// Enables serial_receive in simulation
+	parameter SIM_SERIAL_NORESET = 0	// Disables nonce reset in simulation (to speed up cgminer sim)
 	)
 	(osc_clk, RxD, TxD, led1, led2, led3);
 
@@ -80,7 +83,6 @@ module fpgaminer_top #(
 	reg [255:0] hash_d1;
 	reg [6:0] seq_d1 = 0;		// Needs to be init to 0 else breaks nonce_next in simulation
 	reg [7:0] nonce_lsb_d1 = 0;	// May be able to get away with 6 bits here, but its probably in RAM so no need
-	reg fullhash_d1 = 0;
 
 	reg phase = 1'b0;			// Alternates function between first and second SHA256
 
@@ -109,26 +111,40 @@ module fpgaminer_top #(
 
 	wire [255:0] midstate_vw;
 	wire [95:0] data2_vw;
+	wire load_flag;
 
 	// NB Since already latched in serial_receive, can we get rid of these latches (or just use for simulation)? TODO !!
 	
-	// NB If simulating serial_receive, this 'ifdef needs to be disabled (use `ifdef SIMXXX)
+	// This is rather clunky as I want to use parameter SIM_SERIAL to control compilation, and its not as
+	// obvious as it looks eg "if (SIM_SERIAL)" will silently fail if used to instantiate serial_receive!
 	`ifdef SIM
+	wire [255:0] midstate_buf_w;
+	wire [95:0] data_buf_w;
 	reg [255:0] midstate_buf = 0;
 	reg [95:0] data_buf = 0;
+	wire load_flag_mux;
+	assign load_flag_mux = (SIM_SERIAL) ? 0 : load_flag;
 	`else
-	wire [255:0] midstate_buf = midstate_vw;
-	wire [95:0] data_buf = data2_vw;
+	wire [255:0] midstate_buf_w;
+	wire [95:0] data_buf_w;
+	wire [255:0] midstate_buf;
+	wire [95:0] data_buf;
+	assign midstate_buf = midstate_vw;
+	assign data_buf = data2_vw;
+	wire load_flag_mux;
+	assign load_flag_mux = load_flag;
 	`endif
 
-	// Exclude serial_receive from simulation
-	`ifndef SIM
-	serial_receive #(.SPEED_MHZ(SPEED_MHZ)) serrx (.clk(hash_clk), .RxD(RxD), .midstate(midstate_vw), .data2(data2_vw));
+	assign midstate_buf_w = (SIM_SERIAL) ? midstate_vw : midstate_buf;
+	assign data_buf_w = (SIM_SERIAL) ? data2_vw : data_buf;
+	
+	serial_receive #(.SPEED_MHZ(SPEED_MHZ), .ICARUS(ICARUS), .KRAMBLE_TEST(KRAMBLE_TEST)) serrx (.clk(hash_clk), .RxD(RxD), .midstate(midstate_vw), .data2(data2_vw), .load_flag(load_flag));
+
 	// TEST ... hardcode the 1afda099 test data (NB needs DIP_in = 4'h1), will also match on 1e4c2ae6
 	// assign midstate_vw = 256'h85a24391639705f42f64b3b688df3d147445123c323e62143d87e1908b3f07ef;
 	// data_buf is actually 256 or 96 bits, but no harm giving 512 here (its truncated as appropriate)
 	// assign data2_vw = 512'h00000280000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000c513051a02a99050bfec0373;
-	`endif
+	
 
 	//// Virtual Wire Output
 	reg [31:0]	golden_nonce = 0;
@@ -137,11 +153,12 @@ module fpgaminer_top #(
 	
 	// Now including serial_transmit in simulation
 	// `ifndef SIM
-	serial_transmit #(.SPEED_MHZ(SPEED_MHZ)) sertx (.clk(hash_clk), .TxD(TxD), .send(serial_send), .busy(serial_busy), .word(golden_nonce));
+	serial_transmit #(.SPEED_MHZ(SPEED_MHZ), .KRAMBLE_TEST(KRAMBLE_TEST)) sertx (.clk(hash_clk), .TxD(TxD), .send(serial_send), .busy(serial_busy), .word(golden_nonce));
 	// `endif
 
  	//// Control Unit
-	wire reset = !reset_in;
+	reg load_flag_mux_d1 = 1'b0;
+	wire reset = !reset_in | ((ICARUS&&!SIM_SERIAL_NORESET)?(load_flag_mux_d1!=load_flag_mux):1'b0);	// Reset nonce on load else cgminer fails to detect icarus
 	wire phase_next;
 	wire is_hash;
 	wire is_fullhash;
@@ -170,11 +187,11 @@ module fpgaminer_top #(
 		seq_d1 <= seq;
 		nonce_lsb_d1 <= nonce_lsb;
 		phase <= phase_next;
-		fullhash_d1 <= fullhash;
+		load_flag_mux_d1 <= load_flag_mux;
 		
 		// Give new data to the hasher
-		state <= midstate_buf;
-		data <= {nonce_next, data_buf[95:0]};
+		state <= midstate_buf_w;
+		data <= {nonce_next, data_buf_w[95:0]};
 		nonce <= nonce_next;
 		
 		// NB I removed delays here ... add them back if it breaks critical path timing
@@ -191,10 +208,6 @@ module fpgaminer_top #(
 		  serial_send <= 0;
 
 `ifdef SIM
-		// if (!feedback)
-		//	$display ("at feedback_d0 nonce: %8x\nhash: %64x\n", nonce, hash);
-		// if (!feedback_d1)
-		//	$display ("at feedback_d1 nonce: %8x\nhash: %64x\n", nonce, hash);
 		if (is_hash)
 			$display ("is_hash: seq %d nonce: %8x\nhash: %64x\n", seq_d1, { nonce[31:8], nonce_lsb_d1 }, hash_d1);
 `endif

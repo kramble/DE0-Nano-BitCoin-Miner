@@ -6,5 +6,5 @@ wire led1, led2, led3;
 assign led = { 5'b0, led3, led2, led1 };
 
 // NB avr_rx and avr_tx are REVERSED wrt to RxD, TxD of fpgaminer_top !!
-fpgaminer_top uut (clk, avr_tx, avr_rx, led1, led2, led3);
+fpgaminer_top #(.NUM_HASHERS(3),.LOOP(22),.SPEED_MHZ(50),.ICARUS(0)) uut (clk, avr_tx, avr_rx, led1, led2, led3);
 
