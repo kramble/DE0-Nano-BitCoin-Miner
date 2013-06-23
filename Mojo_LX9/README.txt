@@ -30,8 +30,11 @@ Compilation time can be very variable (minor changes can have disproportionate e
 I have been unable to compile with 6 hashers, so the current version is configured for
 3 hashers. SOLVED: you need to set XIL_PAR_ENABLE_LEGALIZER=1 in your environment, so for
 windows you change Computer/(rightclick)/Properties/AdvancedSystemSettings/EnvironmentVars.
-Compilation then works OK (as for whether the bitstream works I don't know), though the
-50MHz build takes much longer than the 100Mhz build (WHY? no idea, just saying).
+Compilation then works OK. ADDENDUM: Xilinx PAR is extremely quirky, just a tiny change to
+the design can make the difference between a 20 minute compile and forever. If you're having
+problems, just try changing the clock speed slightly (say from 100MHz to 90, or 110), or make
+a trivial change to the logic (eg change how the leds are driven, use different bits of nonce,
+or a larger led_match counter, see below). Its completely arbitary but this often works.
 
 I have configured the clock PLL at 50MHz which is fairly conservative, it will likely run at
 100MHz or more. Hash rate is clock * hashers / 132, vis 1.13MHash/sec for 3 hashers at 50MHz
@@ -64,7 +67,7 @@ There are some additional print statements for debugging. Comment these out if n
 
 To use with cgminer: I have added the option to use teknohog's original protocol, just set
 ICARUS=1 in mojo_top.v. You will need to change the packet size in miner.py (trivial as
-the required line is present but commented out) if you want to use that driver Usage with
+the required line is present but commented out) if you want to use that driver. Usage with
 cgminer is more awkward. You will need version 3.1.1 as later versions do not support the
 -S option. The documentation specifies a minimum speed of 2MHash/sec, so you will need one
 of the faster builds (I assume this is because of the icarus auto-detection test). Also
@@ -85,6 +88,21 @@ due to the use of a physical serial port on the raspberry pi rather than USB or 
 fault in my version of the fpgaminer code. Feedback would be appreciated as to whether the
 Mojo works with cgminer 3.1.1)
 
+NB The current icarus build does not compile at 6 hashers, loop 11, 100MHz (it just sits
+in PAR for hours and hours). See addendum above for some hints on how to fix it (I'll not
+amend the current code as this could break other configurations).
+
+The changes I made to get it to compile were ...
+
+// fpgaminer_top.v
+output [7:0]led3;
+reg [7:0]led_match = 0;	
+led_match <= led_match+1;	// Near the bottom of the file "if (is_fullhash && fullhash)"
+
+// mojo_top.v
+wire [7:0]led3;
+assign led = { led3[6:0], led1 };
+
 Changes
 -------
 2013-06-16:11:30 Initial release
@@ -92,8 +110,8 @@ Changes
                  Generated new bitsteams
                  Added serial_rx_debounce.v (used for testing @4800baud, not for Mojo)
 2013-06-22:12:00 Added parameter to serial.v to revert back to teknohog/icarus protocol
-				 Also reset nonce on new work in fpgaminer_top.v
-				 And a whole load of tweaks to make simulation/testing easier.
+                 Also reset nonce on new work in fpgaminer_top.v
+                 And a whole load of tweaks to make simulation/testing easier.
 
 ---------------------------------------------------------------------------
 TODO...
