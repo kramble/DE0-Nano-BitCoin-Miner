@@ -11,6 +11,11 @@ This code is distributed in the hope that it will be useful, but WITHOUT ANY WAR
 without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
+NEWS - BLOCKFINDER - On 31-July-2013 my EP4CE10 running at 12MHash/sec found block 249499 with
+a 1.6 billion difficulty hash 00000000000000029dfde2ddc7f233ef71671bf15d98d44690bc39ecf8818bf1
+This is just so absurdly improbable that I wanted to share that news! PS checkout my new
+Litecoin scrypt mining project at https://github.com/kramble/FPGA-Litecoin-Miner
+
 IMPORTANT You will need to press the KEY-0 pushbutton on the DE0-Nano board to start the miner.
 The LEDs then display a binary count (top byte of nonce) to indicate mining in-progress.
 
@@ -31,6 +36,10 @@ to a standard PC RS232 serial port as you will destroy the DE0-Nano board.)
 serial_solo - the raspberry pi mining driver written in C (rather crude and basic).
 
 FpgaminerOnPi.txt - describes how to setup the serial interface on the pi.
+
+Various other ports including EP4CE10, LX9 (both using my serial interface) and MOJO_LX9.
+Of note is Makomk_Hashers_22_Serial which has reliably performed at 35MHash/sec for several
+months now (code is entirely Makomk's, I just added my raspberry pi serial interface).
 
 The PLL clock speed is set by the parameter (Verilog macro) SPEED_MHZ in units of 10MHz,
 eg SPEED_MHZ=4 runs at 40MHz, which is the default setting. This gives 6.67MHash/s throughput.
